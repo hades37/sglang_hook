@@ -8,10 +8,8 @@ the main process and every forked subprocess.
 from __future__ import annotations
 
 import logging
-from typing import Callable, List, Optional, Tuple
 
 from sglang.srt.plugins.hook_registry import HookRegistry, HookType
-from sglang.srt.server_args import PortArgs, ServerArgs
 
 from sglang_hook.hooks.engine import (
     _fake_launch_scheduler_processes,
@@ -64,12 +62,12 @@ def apply_all() -> None:
     HookRegistry.register(
         "sglang.srt.entrypoints.engine.Engine._launch_subprocesses",
         _fake_launch_subprocesses,
-        HookType.REPLACE,
+        HookType.AROUND,
     )
     HookRegistry.register(
         "sglang.srt.entrypoints.engine.Engine._launch_scheduler_processes",
         _fake_launch_scheduler_processes,
-        HookType.REPLACE,
+        HookType.AROUND,
     )
 
     logger.info("Fake-backend hooks registered (6 hooks)")

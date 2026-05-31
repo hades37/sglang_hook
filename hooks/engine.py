@@ -1,12 +1,15 @@
 """Hooks for ``sglang.srt.entrypoints.engine``.
 
-Two hooks are installed:
+Two AROUND hooks are installed via ``HookRegistry``:
 
 1. ``Engine._launch_subprocesses`` — forces ``dp_size=1, nnodes=1`` *before*
    ``PortArgs`` and ``TokenizerManager`` are initialized.
 
 2. ``Engine._launch_scheduler_processes`` — spawns only **one** scheduler
    subprocess (tp_rank=0, pp_rank=0), regardless of configured ``tp_size``.
+
+AROUND hooks receive ``(original_fn, *args, **kwargs)``, so we can call the
+original function after mutating ``server_args`` or bypass it entirely.
 """
 
 from __future__ import annotations
@@ -14,32 +17,13 @@ from __future__ import annotations
 import logging
 from typing import Callable, List, Optional, Tuple
 
-import sglang.srt.entrypoints.engine as engine_mod
 from sglang.srt.server_args import PortArgs, ServerArgs
 
 logger = logging.getLogger(__name__)
 
-_original_launch_subprocesses: Optional[Callable] = None
-_original_launch_scheduler_processes: Optional[Callable] = None
-
-
-def apply() -> None:
-    global _original_launch_subprocesses, _original_launch_scheduler_processes
-
-    _original_launch_subprocesses = engine_mod.Engine._launch_subprocesses
-    engine_mod.Engine._launch_subprocesses = _fake_launch_subprocesses
-
-    _original_launch_scheduler_processes = (
-        engine_mod.Engine._launch_scheduler_processes
-    )
-    engine_mod.Engine._launch_scheduler_processes = (
-        _fake_launch_scheduler_processes
-    )
-
-    logger.info("Fake-backend engine hooks applied")
-
 
 def _fake_launch_subprocesses(
+    original_fn: Callable,
     cls,
     server_args: ServerArgs,
     init_tokenizer_manager_func: Callable,
@@ -52,13 +36,14 @@ def _fake_launch_subprocesses(
     This ensures ``PortArgs.init_new`` uses IPC (ZMQ) ports and
     ``FanOutCommunicator`` uses ``fan_out=1``.
     """
-    saved = server_args.dp_size, server_args.nnodes
+    saved_dp = server_args.dp_size
+    saved_nnodes = server_args.nnodes
 
     server_args.dp_size = 1
     server_args.nnodes = 1
 
     try:
-        return _original_launch_subprocesses(
+        return original_fn(
             cls,
             server_args=server_args,
             init_tokenizer_manager_func=init_tokenizer_manager_func,
@@ -67,10 +52,12 @@ def _fake_launch_subprocesses(
             port_args=port_args,
         )
     finally:
-        server_args.dp_size, server_args.nnodes = saved
+        server_args.dp_size = saved_dp
+        server_args.nnodes = saved_nnodes
 
 
 def _fake_launch_scheduler_processes(
+    original_fn: Callable,
     cls,
     server_args: ServerArgs,
     port_args: PortArgs,
@@ -135,9 +122,7 @@ def _fake_launch_scheduler_processes(
     def wait_for_completion():
         for proc in scheduler_procs:
             proc.join()
-            logger.error(
-                f"Scheduler {proc.pid} terminated with {proc.exitcode}"
-            )
+            logger.error(f"Scheduler {proc.pid} terminated with {proc.exitcode}")
 
     return (
         SchedulerInitResult(

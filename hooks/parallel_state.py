@@ -10,8 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
-import tempfile
-from typing import Callable, List, Optional
+from typing import List, Optional
 
 import torch
 import torch.distributed
@@ -20,12 +19,6 @@ from sglang_hook.utils.fake_group import FakeGroupCoordinator
 
 logger = logging.getLogger(__name__)
 
-_original_init_distributed_environment: Optional[Callable] = None
-_original_init_model_parallel_group: Optional[Callable] = None
-_original_initialize_model_parallel: Optional[Callable] = None
-_original_torch_get_world_size: Optional[Callable] = None
-_original_torch_get_rank: Optional[Callable] = None
-
 
 def _get_free_port() -> int:
     import socket
@@ -33,28 +26,6 @@ def _get_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
-
-
-def apply() -> None:
-    """Inject fake-backend hooks into ``sglang.srt.distributed.parallel_state``."""
-    import sglang.srt.distributed.parallel_state as ps
-
-    global _original_init_distributed_environment, _original_init_model_parallel_group
-    global _original_initialize_model_parallel, _original_torch_get_world_size
-    global _original_torch_get_rank
-
-    _original_init_distributed_environment = ps.init_distributed_environment
-    _original_init_model_parallel_group = ps.init_model_parallel_group
-    _original_initialize_model_parallel = ps.initialize_model_parallel
-    _original_torch_get_world_size = torch.distributed.get_world_size
-    _original_torch_get_rank = torch.distributed.get_rank
-
-    ps.init_distributed_environment = _fake_init_distributed_environment
-    ps.init_world_group = _fake_init_world_group
-    ps.init_model_parallel_group = _fake_init_model_parallel_group
-    ps.initialize_model_parallel = _fake_initialize_model_parallel
-
-    logger.info("Fake-backend parallel_state hooks applied")
 
 
 def _fake_init_distributed_environment(
