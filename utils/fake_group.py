@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import math
 from contextlib import contextmanager, nullcontext
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -12,12 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 class FakeGroupCoordinator:
-    """Replaces parallel_state.GroupCoordinator for single-process fake backend.
+    """Replaces ``parallel_state.GroupCoordinator`` for single-process fake backend.
 
     All ``world_size`` and topology attributes report the *logical* parallelism
     configuration so that model-weight sharding and scheduling logic see the
     intended degree of parallelism (tp_size, pp_size, dp_size, ep_size, …).
-    Every collective is a **no-op**, i.e. it returns the input unchanged or
+    Every collective is a **no-op** — it returns the input unchanged or
     performs a simple local split/concat that mimics a single-rank operation.
     """
 
@@ -41,10 +40,11 @@ class FakeGroupCoordinator:
         self.device_group = None
         self.cpu_group = None
 
-        self._unique_name = f"fake_{group_name}_{id(self)}"
-        self._register_self()
+        self.unique_name = f"fake_{group_name}_{id(self)}"
 
-        self.device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(
+            f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu"
+        )
         self.device_module = torch.get_device_module(self.device)
 
         self.use_pynccl = False
@@ -72,15 +72,6 @@ class FakeGroupCoordinator:
         self.debug_check_symmetric_mempool = lambda *args, **kwargs: None
 
         self.local_size = 1
-
-    def _register_self(self):
-        from sglang.srt.distributed.parallel_state import _groups, _get_unique_name
-
-        unique = _get_unique_name(self._unique_name)
-        self.unique_name = unique
-        import weakref
-
-        _groups[unique] = weakref.ref(self)
 
     @property
     def world_size(self) -> int:
@@ -179,7 +170,9 @@ class FakeGroupCoordinator:
             chunk_size = input_.shape[0] // wsize
         output_shape = (chunk_size,) + input_.shape[1:]
         if output is None:
-            output = torch.empty(output_shape, dtype=input_.dtype, device=input_.device)
+            output = torch.empty(
+                output_shape, dtype=input_.dtype, device=input_.device
+            )
         output.copy_(input_[:chunk_size])
         return output
 
@@ -214,18 +207,24 @@ class FakeGroupCoordinator:
             return input_
 
         if output_tensor_list is not None:
-            for idx, t in enumerate(output_tensor_list):
+            for t in output_tensor_list:
                 t.copy_(input_)
             return None
 
         if dim < 0:
             dim += input_.dim()
         input_size = input_.size()
-        output_size = input_size[:dim] + (wsize * input_size[dim],) + input_size[dim + 1 :]
-        output_tensor = torch.empty(output_size, dtype=input_.dtype, device=input_.device)
+        output_size = (
+            input_size[:dim] + (wsize * input_size[dim],) + input_size[dim + 1 :]
+        )
+        output_tensor = torch.empty(
+            output_size, dtype=input_.dtype, device=input_.device
+        )
         slices_per_dim = [slice(None)] * input_.dim()
         for i in range(wsize):
-            slices_per_dim[dim] = slice(i * input_size[dim], (i + 1) * input_size[dim])
+            slices_per_dim[dim] = slice(
+                i * input_size[dim], (i + 1) * input_size[dim]
+            )
             output_tensor[tuple(slices_per_dim)] = input_
         return output_tensor
 
@@ -257,9 +256,7 @@ class FakeGroupCoordinator:
     def all_gather_object(self, obj: Any) -> List[Any]:
         return [obj] * self._world_size
 
-    def send_object(
-        self, obj: Any, dst: int, async_send: bool = False
-    ) -> List:
+    def send_object(self, obj: Any, dst: int, async_send: bool = False) -> List:
         return []
 
     def recv_object(self, src: int) -> Any:
@@ -278,7 +275,7 @@ class FakeGroupCoordinator:
         self,
         tensor_dict: Dict[str, Union[torch.Tensor, Any]],
         dst: Optional[int] = None,
-        all_gather_group: Optional[FakeGroupCoordinator] = None,
+        all_gather_group: Optional["FakeGroupCoordinator"] = None,
         async_send: bool = False,
     ):
         return tensor_dict

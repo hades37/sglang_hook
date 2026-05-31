@@ -3,24 +3,14 @@
 Uses SGLang's native ``HookRegistry`` so that hooks are applied at the right
 time (when ``load_plugins()`` calls ``HookRegistry.apply_hooks()``) in both
 the main process and every forked subprocess.
+
+All imports from ``sglang`` are deferred to ``apply_all()`` so that
+``sitecustomize.py`` can safely import this module before SGLang is loaded.
 """
 
 from __future__ import annotations
 
 import logging
-
-from sglang.srt.plugins.hook_registry import HookRegistry, HookType
-
-from sglang_hook.hooks.engine import (
-    _fake_launch_scheduler_processes,
-    _fake_launch_subprocesses,
-)
-from sglang_hook.hooks.parallel_state import (
-    _fake_init_distributed_environment,
-    _fake_init_model_parallel_group,
-    _fake_init_world_group,
-    _fake_initialize_model_parallel,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +28,19 @@ def apply_all() -> None:
     if _HOOKS_APPLIED:
         return
     _HOOKS_APPLIED = True
+
+    from sglang.srt.plugins.hook_registry import HookRegistry, HookType
+
+    from sglang_hook.hooks.engine import (
+        _fake_launch_scheduler_processes,
+        _fake_launch_subprocesses,
+    )
+    from sglang_hook.hooks.parallel_state import (
+        _fake_init_distributed_environment,
+        _fake_init_model_parallel_group,
+        _fake_init_world_group,
+        _fake_initialize_model_parallel,
+    )
 
     HookRegistry.register(
         "sglang.srt.distributed.parallel_state.init_distributed_environment",

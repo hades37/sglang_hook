@@ -27,11 +27,14 @@ def _try_apply():
         from sglang_hook.hooks import apply_all
 
         apply_all()
-    except ImportError:
-        pass
     except Exception:
         import traceback
+        import sys
 
+        print(
+            "[sglang_hook] Failed to apply fake-backend hooks:",
+            file=sys.stderr,
+        )
         traceback.print_exc()
 
 
